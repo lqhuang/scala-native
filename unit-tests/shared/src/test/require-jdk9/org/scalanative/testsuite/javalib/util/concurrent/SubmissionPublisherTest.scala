@@ -64,13 +64,11 @@ class SubmissionPublisherTest extends JSR166Test {
     def awaitSubscribe(): Unit = {
       breakable {
         while (sn == null) {
-          synchronized {
-            try wait(1L)
-            catch {
-              case ex: Exception => {
-                threadUnexpectedException(ex)
-                break()
-              }
+          try wait()
+          catch {
+            case ex: Exception => {
+              threadUnexpectedException(ex)
+              break()
             }
           }
         }
@@ -80,14 +78,13 @@ class SubmissionPublisherTest extends JSR166Test {
     def awaitNext(n: Int): Unit = {
       breakable {
         while (nexts < n) {
-          synchronized {
-            try wait(1L)
-            catch {
-              case ex: Exception => {
-                threadUnexpectedException(ex)
-                break()
-              }
+          try wait()
+          catch {
+            case ex: Exception => {
+              threadUnexpectedException(ex)
+              break()
             }
+
           }
         }
       }
@@ -96,13 +93,11 @@ class SubmissionPublisherTest extends JSR166Test {
     def awaitComplete(): Unit = {
       breakable {
         while (completes == 0 && errors == 0) {
-          synchronized {
-            try wait(1L)
-            catch {
-              case ex: Exception => {
-                threadUnexpectedException(ex)
-                break()
-              }
+          try wait()
+          catch {
+            case ex: Exception => {
+              threadUnexpectedException(ex)
+              break()
             }
           }
         }
@@ -112,13 +107,11 @@ class SubmissionPublisherTest extends JSR166Test {
     def awaitError(): Unit = {
       breakable {
         while (errors == 0) {
-          synchronized {
-            try wait(1L)
-            catch {
-              case ex: Exception => {
-                threadUnexpectedException(ex)
-                break()
-              }
+          try wait()
+          catch {
+            case ex: Exception => {
+              threadUnexpectedException(ex)
+              break()
             }
           }
         }
