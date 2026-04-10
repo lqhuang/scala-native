@@ -18,7 +18,7 @@ import scala.scalanative.libc.stdatomic.memory_order.{
 import scala.scalanative.libc.stdatomic.{AtomicInt, AtomicLongLong, AtomicRef}
 import scala.scalanative.runtime.Intrinsics.classFieldRawPtr
 import scala.scalanative.runtime.{ObjectArray, fromRawPtr}
-import scala.scalanative.unsafe.{Ptr, stackalloc}
+import scala.scalanative.unsafe.Ptr
 
 // @since JDK 9
 class SubmissionPublisher[T](
@@ -665,29 +665,33 @@ object SubmissionPublisher {
   private[SubmissionPublisher] object BufferedSubscription {
 
     /** ctl bit values */
-    private[SubmissionPublisher] object CtlFlag {
-      val CLOSED = 0x01 // if set, other bits ignored
-      val ACTIVE = 0x02 // keep-alive for consumer task
-      val REQS = 0x04 // (possibly) nonzero demand
-      val ERROR = 0x08 // issues onError when noticed
-      val COMPLETE = 0x10 // issues onComplete when done
-      val RUN = 0x20 // task is or will be running
-      val OPEN = 0x40 // true after subscribe
+    private[SubmissionPublisher] object Ctl {
+      final val CLOSED = 0x01 // if set, other bits ignored
+      final val ACTIVE = 0x02 // keep-alive for consumer task
+      final val REQS = 0x04 // (possibly) nonzero demand
+      final val ERROR = 0x08 // issues onError when noticed
+      final val COMPLETE = 0x10 // issues onComplete when done
+      final val RUN = 0x20 // task is or will be running
+      final val OPEN = 0x40 // true after subscribe
     }
 
     /** timeout vs interrupt sentinel */
-    private[SubmissionPublisher] val INTERRUPTED = -1L
+    private[SubmissionPublisher] final val INTERRUPTED = -1L
 
   }
 
+  private type Contended = scala.scalanative.annotation.align
+
+  @Contended()
   final class BufferedSubscription[T] private[SubmissionPublisher] (
       private[SubmissionPublisher] val subscriber: Flow.Subscriber[? >: T],
       private var executor: Executor,
       private val initCapacity: Int,
       private val maxCapacity: Int,
-      private val handler: BiConsumer[? >: Flow.Subscriber[
-        ? >: T
-      ], ? >: Throwable]
+      private val handler: BiConsumer[
+        ? >: Flow.Subscriber[? >: T],
+        ? >: Throwable
+      ]
   ) extends Flow.Subscription
       with ForkJoinPool.ManagedBlocker {
 
@@ -696,16 +700,16 @@ object SubmissionPublisher {
     require(initCapacity > 0, "initCapacity must be positive")
     require(maxCapacity > 0, "maxCapacity must be positive")
 
-    import BufferedSubscription.CtlFlag
+    import BufferedSubscription.Ctl
 
     // > 0 if timed wait, Long.MAX_VALUE if untimed wait
-    @Contended("c") private var timeout: Long = 0L
+    private var timeout: Long = 0L
     // next position to take
-    @Contended("c") private var head: Int = 0
+    private var head: Int = 0
     // next position to put
-    @Contended("c") private var tail: Int = 0
+    private var tail: Int = 0
     // atomic run state flags
-    @Contended("c") private var ctl: Int = 0
+    private var ctl: Int = 0
     // buffer array, the type constraint is T <: AnyRef
     private var buffer = new Array[Object](initCapacity)
     // blocked producer thread
@@ -718,7 +722,6 @@ object SubmissionPublisher {
     // next node for retry linked list
     private[SubmissionPublisher] var nextRetry: BufferedSubscription[T] = _
 
-    private type Contended = scala.scalanative.annotation.align
     // unfilled requests
     @Contended("c") private var demand: Long = 0L
     // nonzero if producer blocked
@@ -727,11 +730,8 @@ object SubmissionPublisher {
     // Utilities for atomic access to fields
 
     @alwaysinline
-    private def tailPtr: Ptr[Int] =
-      fromRawPtr[Int](classFieldRawPtr(this, "tail"))
-    @alwaysinline
     private def tailAtm: AtomicInt =
-      new AtomicInt(tailPtr)
+      new AtomicInt(fromRawPtr[Int](classFieldRawPtr(this, "tail")))
     @alwaysinline
     private def tailIncrementAndGet(): Int =
       tailAtm.fetchAdd(1) + 1
@@ -740,27 +740,21 @@ object SubmissionPublisher {
       tailAtm.fetchAdd(1)
 
     @alwaysinline
-    private def ctlPtr: Ptr[Int] =
-      fromRawPtr[Int](classFieldRawPtr(this, "ctl"))
-    @alwaysinline
     private def ctlAtm =
-      new AtomicInt(ctlPtr)
+      new AtomicInt(fromRawPtr[Int](classFieldRawPtr(this, "ctl")))
     @alwaysinline
     private def ctlGetAndBitwiseOr(bits: Int): Int =
       ctlAtm.fetchOr(bits)
     @alwaysinline
-    private def ctlWeakCompareAndSet(expect: Ptr[Int], value: Int): Boolean =
-      ctlAtm.compareExchangeWeak(expect, value)
+    private def ctlWeakCompareAndSet(expectValue: Int, value: Int): Boolean =
+      ctlAtm.compareExchangeWeak(expectValue, value)
 
     @alwaysinline
-    private def demandPtr: Ptr[Long] =
-      fromRawPtr[Long](classFieldRawPtr(this, "demand"))
-    @alwaysinline
     private def demandAtm =
-      new AtomicLongLong(demandPtr)
+      new AtomicLongLong(fromRawPtr[Long](classFieldRawPtr(this, "demand")))
     @alwaysinline
-    private def demandCompareAndSet(expect: Ptr[Long], value: Long): Boolean =
-      demandAtm.compareExchangeStrong(expect, value)
+    private def demandCompareAndSet(expectValue: Long, value: Long): Boolean =
+      demandAtm.compareExchangeStrong(expectValue, value)
     @alwaysinline
     private def demandSubtractAndGet(k: Long): Long =
       demandAtm.fetchSub(k) - k
@@ -795,7 +789,7 @@ object SubmissionPublisher {
 
     /** Returns true if closed (consumer task may still be running). */
     def isClosed() =
-      (ctl & CtlFlag.CLOSED) != 0
+      (ctl & Ctl.CLOSED) != 0
 
     /** Returns estimated number of buffered items, or negative if closed. */
     def estimateLag(): Int = {
@@ -906,13 +900,13 @@ object SubmissionPublisher {
       var _stat = stat
 
       // start or keep alive if requests exist and not active
-      if ((_ctl & (CtlFlag.REQS | CtlFlag.ACTIVE)) == CtlFlag.REQS
+      if ((_ctl & (Ctl.REQS | Ctl.ACTIVE)) == Ctl.REQS
           && {
-            _ctl = ctlGetAndBitwiseOr(CtlFlag.RUN | CtlFlag.ACTIVE)
-            (_ctl & (CtlFlag.RUN | CtlFlag.CLOSED)) == 0
+            _ctl = ctlGetAndBitwiseOr(Ctl.RUN | Ctl.ACTIVE)
+            (_ctl & (Ctl.RUN | Ctl.CLOSED)) == 0
           })
         tryStart()
-      else if ((_ctl & CtlFlag.CLOSED) != 0)
+      else if ((_ctl & Ctl.CLOSED) != 0)
         _stat = -1
 
       _stat
@@ -926,7 +920,7 @@ object SubmissionPublisher {
           executor.execute(task)
       } catch {
         case exc @ (_: RuntimeException | _: Error) =>
-          ctlGetAndBitwiseOr(CtlFlag.ERROR | CtlFlag.CLOSED)
+          ctlGetAndBitwiseOr(Ctl.ERROR | Ctl.CLOSED)
           throw exc
       }
 
@@ -939,14 +933,14 @@ object SubmissionPublisher {
      */
     def startOnSignal(bits: Int): Unit =
       if ((ctl & bits) != bits
-          && (ctlGetAndBitwiseOr(bits) & (CtlFlag.RUN | CtlFlag.CLOSED)) == 0)
+          && (ctlGetAndBitwiseOr(bits) & (Ctl.RUN | Ctl.CLOSED)) == 0)
         tryStart()
 
     def onSubscribe(): Unit =
-      startOnSignal(CtlFlag.RUN | CtlFlag.ACTIVE)
+      startOnSignal(Ctl.RUN | Ctl.ACTIVE)
 
     def onComplete(): Unit =
-      startOnSignal(CtlFlag.RUN | CtlFlag.ACTIVE | CtlFlag.COMPLETE)
+      startOnSignal(Ctl.RUN | Ctl.ACTIVE | Ctl.COMPLETE)
 
     /** Issues error signal, asynchronously if a task is running, else
      *  synchronously.
@@ -955,11 +949,9 @@ object SubmissionPublisher {
       if (exc != null)
         pendingError = exc // races are OK
 
-      val _ctl = ctlGetAndBitwiseOr(
-        CtlFlag.ERROR | CtlFlag.RUN | CtlFlag.ACTIVE
-      )
-      if ((_ctl & CtlFlag.CLOSED) == 0) {
-        if ((_ctl & CtlFlag.RUN) == 0)
+      val _ctl = ctlGetAndBitwiseOr(Ctl.ERROR | Ctl.RUN | Ctl.ACTIVE)
+      if ((_ctl & Ctl.CLOSED) == 0) {
+        if ((_ctl & Ctl.RUN) == 0)
           tryStart()
         else
           Arrays.fill(buffer, null)
@@ -976,12 +968,12 @@ object SubmissionPublisher {
     override def request(n: Long): Unit =
       if (n > 0L) {
         while ({
-          val p = stackalloc[Long](); !p = demand
-          val d = !p + n // saturate
-          !demandCompareAndSet(p, if (d < !p) Long.MaxValue else d)
+          val p = demand
+          val d = p + n // saturate
+          !demandCompareAndSet(p, if (d < p) Long.MaxValue else d)
         }) {}
 
-        startOnSignal(CtlFlag.RUN | CtlFlag.ACTIVE | CtlFlag.REQS)
+        startOnSignal(Ctl.RUN | Ctl.ACTIVE | Ctl.REQS)
       } // force a new line for formatting
       else
         onError(
@@ -994,7 +986,7 @@ object SubmissionPublisher {
      *  during submit.
      */
     def consume(): Unit = {
-      // `subscriber != null` checked in constructor
+      // `subscriber != null` has been checked in the constructor
       subscribeOnOpen(subscriber)
 
       var _demand = demand
@@ -1003,13 +995,11 @@ object SubmissionPublisher {
 
       var break = false
       while (!break) {
-        val _ctlPtr = stackalloc[Int](); !_ctlPtr = ctl
-        @alwaysinline def _ctl = !_ctlPtr
-
+        val _ctl = ctl
         var taken = 0
         var empty = false
 
-        if ((_ctl & CtlFlag.ERROR) != 0) {
+        if ((_ctl & Ctl.ERROR) != 0) {
           closeOnError(subscriber, null)
           break = true
         } // force a new line for formatting
@@ -1022,27 +1012,25 @@ object SubmissionPublisher {
           _demand = demandSubtractAndGet(taken.toLong)
         } // force a new line for formatting
         else if ({ _demand = demand; _demand == 0L }
-            && ((_ctl & CtlFlag.REQS) != 0)) // exhausted demand
-          ctlWeakCompareAndSet(_ctlPtr, _ctl & ~CtlFlag.REQS): Unit
-        else if (_demand != 0L && (_ctl & CtlFlag.REQS) == 0) // new demand
-          ctlWeakCompareAndSet(_ctlPtr, _ctl | CtlFlag.REQS): Unit
+            && ((_ctl & Ctl.REQS) != 0)) // exhausted demand
+          ctlWeakCompareAndSet(_ctl, _ctl & ~Ctl.REQS): Unit
+        else if (_demand != 0L && (_ctl & Ctl.REQS) == 0) // new demand
+          ctlWeakCompareAndSet(_ctl, _ctl | Ctl.REQS): Unit
         else if ({
           val _tail_old = _tail; _tail = tail;
           _tail_old == _tail // stability check
         }) {
-          if ({ empty = _tail == _head; empty }
-              && (_ctl & CtlFlag.COMPLETE) != 0) {
+          if ({ empty = _tail == _head; empty } && (_ctl & Ctl.COMPLETE) != 0) {
             closeOnComplete(subscriber) // end of stream
             break = true
           } // force a new line for formatting
           else if (empty || _demand == 0L) {
             val bit =
-              if ((_ctl & CtlFlag.ACTIVE) != 0) CtlFlag.ACTIVE
-              else CtlFlag.RUN
-            if (ctlWeakCompareAndSet(
-                  _ctlPtr,
-                  _ctl & ~bit
-                ) && bit == CtlFlag.RUN)
+              if ((_ctl & Ctl.ACTIVE) != 0)
+                Ctl.ACTIVE
+              else
+                Ctl.RUN
+            if (ctlWeakCompareAndSet(_ctl, _ctl & ~bit) && bit == Ctl.RUN)
               break = true
           }
         }
@@ -1118,9 +1106,8 @@ object SubmissionPublisher {
 
     /** Issues subscriber.onSubscribe if this is first signal. */
     def subscribeOnOpen(sub: Flow.Subscriber[? >: T]): Unit =
-      if ((ctl & CtlFlag.OPEN) == 0
-          &&
-          (ctlGetAndBitwiseOr(CtlFlag.OPEN) & CtlFlag.OPEN) == 0) {
+      if ((ctl & Ctl.OPEN) == 0
+          && (ctlGetAndBitwiseOr(Ctl.OPEN) & Ctl.OPEN) == 0) {
         consumeSubscribe(sub)
       }
 
@@ -1134,7 +1121,7 @@ object SubmissionPublisher {
 
     /** Issues subscriber.onComplete unless already closed. */
     def closeOnComplete(sub: Flow.Subscriber[? >: T]): Unit = {
-      if ((ctlGetAndBitwiseOr(CtlFlag.CLOSED) & CtlFlag.CLOSED) == 0)
+      if ((ctlGetAndBitwiseOr(Ctl.CLOSED) & Ctl.CLOSED) == 0)
         consumeComplete(sub)
     }
 
@@ -1148,8 +1135,7 @@ object SubmissionPublisher {
     /** Issues subscriber.onError, and unblocks producer if needed. */
     def closeOnError(sub: Flow.Subscriber[? >: T], exc: Throwable): Unit = {
       var _exc = exc
-      if ((ctlGetAndBitwiseOr(CtlFlag.ERROR | CtlFlag.CLOSED) & CtlFlag.CLOSED)
-            == 0) {
+      if ((ctlGetAndBitwiseOr(Ctl.ERROR | Ctl.CLOSED) & Ctl.CLOSED) == 0) {
         if (exc == null)
           _exc = pendingError
         pendingError = null // detach
@@ -1177,7 +1163,7 @@ object SubmissionPublisher {
 
     /** Returns true if closed or space available. For ManagedBlocker. */
     def isReleasable(): Boolean =
-      ((ctl & CtlFlag.CLOSED) != 0) || {
+      ((ctl & Ctl.CLOSED) != 0) || {
         val cap = buffer.length
         cap > 0 && (arrayGetAcquire(buffer, (cap - 1) & tail) == null)
       }
