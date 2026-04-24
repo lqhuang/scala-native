@@ -34,6 +34,7 @@ object Test {
     for (j <- 0 until WARMUP_RUNS) {
       println(f"Run warmup step ${j + 1} ...  ")
       SubmissionPublisherLoops2Test(ITEMS).execute()
+      Thread.sleep(1000L)
     }
     var times2: List[Double] = List()
     println("-- Running benchmark ...")
@@ -41,6 +42,7 @@ object Test {
       println(f"Run benchmark step ${j + 1} ...")
       val tic = System.nanoTime()
       SubmissionPublisherLoops2Test(ITEMS).execute()
+      Thread.sleep(1000L)
       val toc = System.nanoTime()
       val timeSeconds = (toc - tic).toDouble / NPS
       println(
@@ -59,6 +61,7 @@ object Test {
     for (j <- 0 until WARMUP_RUNS) {
       print(f"Run warmup step ${j + 1} ...  ")
       SubmissionPublisherLoops3Test(ITEMS).execute()
+      Thread.sleep(1000L)
     }
     var times3: List[Double] = List()
     println("-- Running benchmark ...")
@@ -66,6 +69,7 @@ object Test {
       println(f"Run benchmark step ${j + 1} ...")
       val tic = System.nanoTime()
       SubmissionPublisherLoops3Test(ITEMS).execute()
+      Thread.sleep(1000L)
       val toc = System.nanoTime()
       val timeSeconds = (toc - tic).toDouble / NPS
       println(
@@ -85,6 +89,7 @@ object Test {
     for (j <- 0 until WARMUP_RUNS) {
       print(f"Run warmup step ${j + 1} ...  ")
       SubmissionPublisherLoops4Test(ITEMS).execute()
+      Thread.sleep(1000L)
     }
     var times4: List[Double] = List()
     println("-- Running benchmark ...")
@@ -92,6 +97,7 @@ object Test {
       println(f"Run benchmark step ${j + 1} ...")
       val tic = System.nanoTime()
       SubmissionPublisherLoops4Test(ITEMS).execute()
+      Thread.sleep(1000L)
       val toc = System.nanoTime()
       val timeSeconds = (toc - tic).toDouble / NPS
       println(f"  per step time: ${timeSeconds}%7.3f seconds")
