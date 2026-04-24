@@ -42,17 +42,17 @@ object Test {
       println(f"Run benchmark step ${j + 1} ...")
       val tic = System.nanoTime()
       SubmissionPublisherLoops2Test(ITEMS).execute()
-      Thread.sleep(1000L)
       val toc = System.nanoTime()
       val timeSeconds = (toc - tic).toDouble / NPS
       println(
         f"  per step time: ${timeSeconds}%7.3f seconds"
       )
       times2 = times2.appended(timeSeconds)
+      Thread.sleep(1000L)
     }
     println("-- Statistics:")
-    println(s" Average time: ${average(times2)}%7.3f seconds")
-    println(s" Std Dev time: ${stddev(times2)}%7.3f seconds")
+    println(f" Average time: ${average(times2)}%7.3f seconds")
+    println(f" Std Dev time: ${stddev(times2)}%7.3f seconds")
     println(s"-- End of SubmissionPublisherLoops2Test session --")
     println("")
 
@@ -69,17 +69,17 @@ object Test {
       println(f"Run benchmark step ${j + 1} ...")
       val tic = System.nanoTime()
       SubmissionPublisherLoops3Test(ITEMS).execute()
-      Thread.sleep(1000L)
       val toc = System.nanoTime()
       val timeSeconds = (toc - tic).toDouble / NPS
       println(
         f"  per step time: ${timeSeconds}%7.3f seconds"
       )
       times3 = times3.appended(timeSeconds)
+      Thread.sleep(1000L)
     }
     println("-- Statistics:")
-    println(s" Average time: ${average(times3)}%7.3f seconds")
-    println(s" Std Dev time: ${stddev(times3)}%7.3f seconds")
+    println(f" Average time: ${average(times3)}%7.3f seconds")
+    println(f" Std Dev time: ${stddev(times3)}%7.3f seconds")
     println(s"-- End of SubmissionPublisherLoops3Test session --")
     println("")
 
@@ -97,15 +97,15 @@ object Test {
       println(f"Run benchmark step ${j + 1} ...")
       val tic = System.nanoTime()
       SubmissionPublisherLoops4Test(ITEMS).execute()
-      Thread.sleep(1000L)
       val toc = System.nanoTime()
       val timeSeconds = (toc - tic).toDouble / NPS
       println(f"  per step time: ${timeSeconds}%7.3f seconds")
       times4 = times4.appended(timeSeconds)
+      Thread.sleep(1000L)
     }
     println("-- Statistics:")
-    println(s" Average time: ${average(times4)}%7.3f seconds")
-    println(s" Std Dev time: ${stddev(times4)}%7.3f seconds")
+    println(f" Average time: ${average(times4)}%7.3f seconds")
+    println(f" Std Dev time: ${stddev(times4)}%7.3f seconds")
     println(s"-- End of SubmissionPublisherLoops4Test session --")
     println("")
 
