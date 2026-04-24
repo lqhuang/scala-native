@@ -27,7 +27,7 @@ object Test {
     val WARMUP_RUNS = 5
     val BENCHMARK_RUNS = 10
     val NPS: Long = 1000L * 1000 * 1000
-    val ITEMS = 1 << 10
+    val ITEMS = 1 << 20
 
     println(s"-- Benchmark for SubmissionPublisherLoops2Test --")
     println("-- Warming up ...")
